@@ -4,6 +4,8 @@ import sys
 import fire
 import gradio as gr
 import torch
+import torch_dipu
+from torch.profiler import profile, ProfilerActivity
 import transformers
 from peft import PeftModel
 from transformers import GenerationConfig, LlamaForCausalLM, LlamaTokenizer
@@ -91,12 +93,13 @@ def main(
         top_p=0.75,
         top_k=40,
         num_beams=4,
-        max_new_tokens=128,
+        max_new_tokens=1,
         stream_output=False,
         **kwargs,
     ):
         prompt = prompter.generate_prompt(instruction, input)
         inputs = tokenizer(prompt, return_tensors="pt")
+        print(inputs)
         input_ids = inputs["input_ids"].to(device)
         generation_config = GenerationConfig(
             temperature=temperature,
@@ -158,6 +161,7 @@ def main(
         output = tokenizer.decode(s)
         yield prompter.get_response(output)
 
+    """
     gr.Interface(
         fn=evaluate,
         inputs=[
@@ -193,25 +197,33 @@ def main(
         title="🦙🌲 Alpaca-LoRA",
         description="Alpaca-LoRA is a 7B-parameter LLaMA model finetuned to follow instructions. It is trained on the [Stanford Alpaca](https://github.com/tatsu-lab/stanford_alpaca) dataset and makes use of the Huggingface LLaMA implementation. For more information, please visit [the project's website](https://github.com/tloen/alpaca-lora).",  # noqa: E501
     ).queue().launch(server_name="0.0.0.0", share=share_gradio)
-    # Old testing code follows.
+    Old testing code follows.
+    """
 
-    """
     # testing code for readme
-    for instruction in [
-        "Tell me about alpacas.",
-        "Tell me about the president of Mexico in 2019.",
-        "Tell me about the king of France in 2019.",
-        "List all Canadian provinces in alphabetical order.",
-        "Write a Python program that prints the first 10 Fibonacci numbers.",
-        "Write a program that prints the numbers from 1 to 100. But for multiples of three print 'Fizz' instead of the number and for the multiples of five print 'Buzz'. For numbers which are multiples of both three and five print 'FizzBuzz'.",  # noqa: E501
-        "Tell me five words that rhyme with 'shock'.",
-        "Translate the sentence 'I have no mouth but I must scream' into Spanish.",
-        "Count up from 1 to 500.",
-    ]:
-        print("Instruction:", instruction)
-        print("Response:", evaluate(instruction))
-        print()
-    """
+    with profile(
+        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+        profile_memory=True,
+        record_shapes=True,
+        with_modules=True,
+        with_stack=True,
+        experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True)
+    ) as prof:
+        for instruction in [
+            "Tell me about alpacas.",
+            # "Tell me about the president of Mexico in 2019.",
+            # "Tell me about the king of France in 2019.",
+            # "List all Canadian provinces in alphabetical order.",
+            # "Write a Python program that prints the first 10 Fibonacci numbers.",
+            # "Write a program that prints the numbers from 1 to 100. But for multiples of three print 'Fizz' instead of the number and for the multiples of five print 'Buzz'. For numbers which are multiples of both three and five print 'FizzBuzz'.",  # noqa: E501
+            # "Tell me five words that rhyme with 'shock'.",
+            # "Translate the sentence 'I have no mouth but I must scream' into Spanish.",
+            # "Count up from 1 to 500.",
+        ]:
+            print("Instruction:", instruction)
+            print("Response:", list(evaluate(instruction)))
+            print()
+    prof.export_chrome_trace("./torch_dipu_llama7b_profiler.json")
 
 
 if __name__ == "__main__":
