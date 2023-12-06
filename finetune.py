@@ -1,9 +1,16 @@
 import os
+os.environ["WANDB_DISABLED"] = 'true'
 import sys
 from typing import List
 
 import fire
 import torch
+# one_iter_tool_package = "transformer"
+# from capture import insert_capture
+try:
+    import torch_dipu
+except:
+    pass
 import transformers
 from datasets import load_dataset
 
@@ -111,7 +118,7 @@ def train(
 
     model = LlamaForCausalLM.from_pretrained(
         base_model,
-        load_in_8bit=True,
+        load_in_8bit=False,
         torch_dtype=torch.float16,
         device_map=device_map,
     )
@@ -171,7 +178,7 @@ def train(
             ]  # could be sped up, probably
         return tokenized_full_prompt
 
-    model = prepare_model_for_int8_training(model)
+    # model = prepare_model_for_int8_training(model)
 
     config = LoraConfig(
         r=lora_r,
@@ -271,6 +278,7 @@ def train(
         model = torch.compile(model)
 
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    # insert_capture(trainer)
 
     model.save_pretrained(output_dir)
 
