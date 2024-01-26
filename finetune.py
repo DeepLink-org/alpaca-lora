@@ -111,7 +111,8 @@ def train(
 
     model = LlamaForCausalLM.from_pretrained(
         base_model,
-        load_in_8bit=True,
+        #load_in_8bit=True,
+        load_in_8bit=False,  #Do not support on v100
         torch_dtype=torch.float16,
         device_map=device_map,
     )
@@ -171,7 +172,7 @@ def train(
             ]  # could be sped up, probably
         return tokenized_full_prompt
 
-    model = prepare_model_for_int8_training(model)
+    #model = prepare_model_for_int8_training(model) #Do not support on v100
 
     config = LoraConfig(
         r=lora_r,
