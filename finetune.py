@@ -3,6 +3,7 @@ import sys
 from typing import List
 
 import fire
+import torch_dipu
 import torch
 import transformers
 from datasets import load_dataset
