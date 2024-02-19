@@ -1,2 +1,7 @@
 accelerate==v0.23.0
 peft==v0.5.0
+loralib
+bitsandbytes
+black[jupyter]
+fire
+gradio
