@@ -1,4 +1,5 @@
 import os
+os.environ["WANDB_DISABLED"] = 'true'
 import sys
 from typing import List
 
@@ -6,6 +7,8 @@ import fire
 import torch_dipu
 import torch
 import transformers
+one_iter_tool_package = "transformer"
+from one_iter.capture import insert_capture
 from datasets import load_dataset
 
 """
@@ -34,7 +37,7 @@ def train(
     # training hyperparams
     batch_size: int = 128,
     micro_batch_size: int = 4,
-    num_epochs: int = 3,
+    num_epochs: int = 1,
     learning_rate: float = 3e-4,
     cutoff_len: int = 256,
     val_set_size: int = 2000,
@@ -260,18 +263,19 @@ def train(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
         ),
     )
-    model.config.use_cache = False
+    # model.config.use_cache = False
 
-    old_state_dict = model.state_dict
-    model.state_dict = (
-        lambda self, *_, **__: get_peft_model_state_dict(
-            self, old_state_dict()
-        )
-    ).__get__(model, type(model))
+    # old_state_dict = model.state_dict
+    # model.state_dict = (
+    #     lambda self, *_, **__: get_peft_model_state_dict(
+    #         self, old_state_dict()
+    #     )
+    # ).__get__(model, type(model))
 
     if torch.__version__ >= "2" and sys.platform != "win32":
         model = torch.compile(model)
 
+    insert_capture(trainer)
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     model.save_pretrained(output_dir)
