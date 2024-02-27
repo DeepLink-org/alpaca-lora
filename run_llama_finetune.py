@@ -9,7 +9,7 @@ def main():
     parser.add_argument("--output_dir", type=str,
                         default="./one_iter_data/workdirs_alpaca_lora_llama_finetune", help="Output directory")
     parser.add_argument("--base_model", type=str,
-                        default="/mnt/share/share_data/PAT/datasets/llama_1B_oneiter/")
+                        default="data/llama_1B_oneiter/")
     args = parser.parse_args()
 
     current_working_directory = os.path.dirname(os.path.abspath(__file__))

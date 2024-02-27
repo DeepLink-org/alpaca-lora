@@ -8,7 +8,7 @@ import torch_dipu
 import torch
 import transformers
 one_iter_tool_package = "transformer"
-from one_iter.capture import insert_capture
+from capture import insert_capture
 from datasets import load_dataset
 
 """
