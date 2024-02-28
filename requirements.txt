@@ -1,3 +1,1 @@
-peft==v0.5.0
-loralib
 fire
