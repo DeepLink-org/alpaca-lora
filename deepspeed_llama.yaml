@@ -1,0 +1,25 @@
+compute_environment: LOCAL_MACHINE
+downcast_bf16: 'no'
+deepspeed_config:
+  gradient_accumulation_steps: 'auto'
+  gradient_clipping: 1.0
+  offload_optimizer_device: none
+  offload_param_device: none
+  zero3_init_flag: true
+  zero3_save_16bit_model: true
+  zero_stage: 3
+distributed_type: DEEPSPEED
+dynamo_config: {}
+fsdp_config: {}
+megatron_lm_config: {}
+mixed_precision: fp16
+same_network: true
+main_training_function: main
+num_machines: 1
+# if use raw allocator, can squeeze in 2 card.
+num_processes: 8
+rdzv_backend: static
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false

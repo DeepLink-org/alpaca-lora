@@ -4,7 +4,11 @@ from typing import List
 
 import fire
 import torch
+import torch_dipu
 import transformers
+import deepspeed
+import torch_dipu.utils.deepspeed_dipu
+from transformers.integrations import HfDeepSpeedConfig
 from datasets import load_dataset
 
 """
@@ -23,12 +27,12 @@ from peft import (
 from transformers import LlamaForCausalLM, LlamaTokenizer
 
 from utils.prompter import Prompter
-
+os.environ["WANDB_DISABLED"]="true"
 
 def train(
     # model/data params
     base_model: str = "",  # the only required argument
-    data_path: str = "yahma/alpaca-cleaned",
+    data_path: str = "./alpaca_data.json",
     output_dir: str = "./lora-alpaca",
     # training hyperparams
     batch_size: int = 128,
@@ -109,11 +113,63 @@ def train(
     if len(wandb_log_model) > 0:
         os.environ["WANDB_LOG_MODEL"] = wandb_log_model
 
+    trainer_args=transformers.TrainingArguments(
+            per_device_train_batch_size=micro_batch_size,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            warmup_steps=100,
+            num_train_epochs=num_epochs,
+            learning_rate=learning_rate,
+            fp16=True,
+            logging_steps=10,
+            optim="adamw_torch",
+            evaluation_strategy="steps" if val_set_size > 0 else "no",
+            save_strategy="steps",
+            eval_steps=200 if val_set_size > 0 else None,
+            save_steps=200,
+            output_dir=output_dir,
+            save_total_limit=3,
+            load_best_model_at_end=True if val_set_size > 0 else False,
+            ddp_find_unused_parameters=False if ddp else None,
+            group_by_length=group_by_length,
+            report_to=None,
+            run_name=wandb_run_name if use_wandb else None,
+            dataloader_pin_memory=False if torch_dipu.vendor_type == "DROPLET" else True
+        )
+
+    deepspeed.init_distributed("nccl")
+
+    ds_config = {
+    "fp16": {
+        "enabled": "auto",
+        "loss_scale": 0,
+        "loss_scale_window": 100,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1e-10
+    },
+
+    "zero_optimization": {
+        "stage":3,
+        "allgather_partitions": True,
+        "allgather_bucket_size": 1e8,
+        "overlap_comm": True,
+        "reduce_scatter": True,
+        "reduce_bucket_size": 1e8,
+        "contiguous_gradients": True
+    },
+    "train_micro_batch_size_per_gpu":micro_batch_size,
+    "gradient_accumulation_steps": 8,
+    "gradient_clipping": "auto",
+    "steps_per_print": 2000,
+    "wall_clock_breakdown": False
+    }
+
+    # 设定此配置信息，以保证模型直接在GPU上加载
+    hfConf = HfDeepSpeedConfig(ds_config)
     model = LlamaForCausalLM.from_pretrained(
         base_model,
-        load_in_8bit=True,
+        load_in_8bit=False,
         torch_dtype=torch.float16,
-        device_map=device_map,
     )
 
     tokenizer = LlamaTokenizer.from_pretrained(base_model)
@@ -171,7 +227,7 @@ def train(
             ]  # could be sped up, probably
         return tokenized_full_prompt
 
-    model = prepare_model_for_int8_training(model)
+    #model = prepare_model_for_int8_training(model)
 
     config = LoraConfig(
         r=lora_r,
@@ -233,27 +289,7 @@ def train(
         model=model,
         train_dataset=train_data,
         eval_dataset=val_data,
-        args=transformers.TrainingArguments(
-            per_device_train_batch_size=micro_batch_size,
-            gradient_accumulation_steps=gradient_accumulation_steps,
-            warmup_steps=100,
-            num_train_epochs=num_epochs,
-            learning_rate=learning_rate,
-            fp16=True,
-            logging_steps=10,
-            optim="adamw_torch",
-            evaluation_strategy="steps" if val_set_size > 0 else "no",
-            save_strategy="steps",
-            eval_steps=200 if val_set_size > 0 else None,
-            save_steps=200,
-            output_dir=output_dir,
-            save_total_limit=3,
-            load_best_model_at_end=True if val_set_size > 0 else False,
-            ddp_find_unused_parameters=False if ddp else None,
-            group_by_length=group_by_length,
-            report_to="wandb" if use_wandb else None,
-            run_name=wandb_run_name if use_wandb else None,
-        ),
+        args=trainer_args,
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
         ),
